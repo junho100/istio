@@ -34,6 +34,12 @@ _internal_defaults_do_not_set:
   # Additional container arguments
   extraContainerArgs: []
 
+  # Timing for the istiod /ready probe. Increase timeoutSeconds on slow clusters.
+  readinessProbe:
+    initialDelaySeconds: 1
+    periodSeconds: 3
+    timeoutSeconds: 5
+
   env: {}
 
   envVarFrom: []

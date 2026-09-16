@@ -148,9 +148,9 @@ spec:
             httpGet:
               path: /ready
               port: 8080
-            initialDelaySeconds: 1
-            periodSeconds: 3
-            timeoutSeconds: 5
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
           env:
           - name: REVISION
             value: "{{ .Values.revision | default `default` }}"

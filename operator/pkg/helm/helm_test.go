@@ -28,6 +28,7 @@ import (
 	"helm.sh/helm/v4/pkg/chart/common"
 	commonutil "helm.sh/helm/v4/pkg/chart/common/util"
 	"helm.sh/helm/v4/pkg/engine"
+	appsv1 "k8s.io/api/apps/v1"
 	"sigs.k8s.io/yaml"
 
 	"istio.io/istio/istioctl/pkg/install/k8sversion"
@@ -385,6 +386,60 @@ func TestRender(t *testing.T) {
 			if got != want {
 				t.Fatal(cmp.Diff(got, want))
 			}
+		})
+	}
+}
+
+func TestIstiodReadinessProbe(t *testing.T) {
+	tests := []struct {
+		name    string
+		values  string
+		initial int32
+		period  int32
+		timeout int32
+	}{
+		{name: "default", initial: 1, period: 3, timeout: 5},
+		{
+			name:    "timeout override",
+			values:  "spec:\n  values:\n    readinessProbe:\n      timeoutSeconds: 15\n",
+			initial: 1,
+			period:  3,
+			timeout: 15,
+		},
+		{
+			name:    "all timing values overridden",
+			values:  "spec:\n  values:\n    readinessProbe:\n      initialDelaySeconds: 0\n      periodSeconds: 20\n      timeoutSeconds: 10\n",
+			initial: 0,
+			period:  20,
+			timeout: 10,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			vals, err := values.MapFromYaml([]byte(tt.values))
+			require.NoError(t, err)
+			manifests, _, err := renderWithOptions("istiod", "istio-system", "istio-control/istio-discovery", vals, false)
+			require.NoError(t, err)
+
+			for _, mf := range manifests {
+				if mf.GetKind() != "Deployment" || mf.GetName() != "istiod" {
+					continue
+				}
+				var deployment appsv1.Deployment
+				require.NoError(t, yaml.Unmarshal([]byte(mf.Content), &deployment))
+				require.Len(t, deployment.Spec.Template.Spec.Containers, 1)
+				probe := deployment.Spec.Template.Spec.Containers[0].ReadinessProbe
+				require.NotNil(t, probe)
+				require.NotNil(t, probe.HTTPGet)
+				require.Equal(t, "/ready", probe.HTTPGet.Path)
+				require.Equal(t, int32(8080), probe.HTTPGet.Port.IntVal)
+				require.Equal(t, tt.initial, probe.InitialDelaySeconds)
+				require.Equal(t, tt.period, probe.PeriodSeconds)
+				require.Equal(t, tt.timeout, probe.TimeoutSeconds)
+				return
+			}
+			t.Fatal("istiod deployment not found")
 		})
 	}
 }
